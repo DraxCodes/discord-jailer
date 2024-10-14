@@ -1,0 +1,10 @@
+version: '1'
+
+services:
+  container-watcher:
+    container_name: discord-jailer
+    image: ghcr.io/sphexi/discord-jail-keeper:main
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
+      - GUILD_ID=YOUR_DISCORD_GUILD_ID
