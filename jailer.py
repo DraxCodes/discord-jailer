@@ -1,4 +1,5 @@
 import logging
+import logging.handlers
 import interactions
 from interactions import listen, Intents, Permissions, slash_default_member_permission
 from interactions.api.events import Ready
@@ -8,12 +9,33 @@ from pytimeparse.timeparse import timeparse
 import datetime
 import asyncio # not currently in use but might later
 
-logging.basicConfig()
+if not os.path.exists("logs"):
+    os.makedirs("logs")
+
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+fileHandler = logging.handlers.TimedRotatingFileHandler(
+    filename="logs/jailer.log", 
+    when="midnight",
+    backupCount=28, 
+    encoding="utf-8")
+fileHandler.setFormatter(formatter)
+fileHandler.setLevel(logging.DEBUG)
+
+streamHandler = logging.StreamHandler()
+streamHandler.setLevel(logging.INFO)
+streamHandler.setFormatter(formatter)
+
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers= [fileHandler, streamHandler],
+    level=logging.DEBUG
+)
+
 cls_log = logging.getLogger("JailerLogger")
-cls_log.setLevel(logging.DEBUG)
 
 bot = interactions.Client(
-    intents=Intents.ALL,
+    intents=Intents.ALL,    
     token=os.environ["DISCORD_TOKEN"],
     default_scope=os.environ["GUILD_ID"],
     sync_interactions=True,
