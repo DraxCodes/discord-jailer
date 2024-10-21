@@ -7,8 +7,10 @@ import os
 import time
 from pytimeparse.timeparse import timeparse
 import datetime
-import asyncio # not currently in use but might later
+import asyncio
 
+
+# Setup Logging
 if not os.path.exists("logs"):
     os.makedirs("logs")
 
@@ -34,6 +36,7 @@ logging.basicConfig(
 
 cls_log = logging.getLogger("JailerLogger")
 
+# Create the bot
 bot = interactions.Client(
     intents=Intents.ALL,    
     token=os.environ["DISCORD_TOKEN"],
@@ -43,17 +46,20 @@ bot = interactions.Client(
     send_command_tracebacks=False
 )
 
-# array of users currently in jail
+# Array of users currently in jail
 users = []
 
-# functions
+## Main Functions
+
+# Parse the duration string
 def parse_duration(duration: str) -> datetime.timedelta:
     duration = duration.lower()
     cls_log.debug(f'Parsing duration {duration}')
     seconds = timeparse(duration)
     cls_log.debug(f'Parsed duration {duration} seconds')
     return datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-    
+
+# Add a jailed user to the array
 def jail_user(user: str, duration: datetime.timedelta, annoy: bool = False):
     users.append({
         "user": user,
@@ -64,25 +70,30 @@ def jail_user(user: str, duration: datetime.timedelta, annoy: bool = False):
     })
     cls_log.info(users)
 
+# Remove a jailed user from the array
 def release_user(user: interactions.User):
     for u in users:
         if u["user"] == user:
             cls_log.info(f'Releasing {user}')
             users.remove(u)
 
+# Annoy the user - this is run as a separate task and will unjail then re-jail the user after 5 seconds
 async def annoy_user(user: interactions.User, start_time: datetime.datetime, duration: datetime.timedelta):
     await interactions.Member.timeout(user, None)
     time.sleep(5)
     await interactions.Member.timeout(user, duration - (datetime.datetime.now() - start_time))
 
+# List all users in jail
 def list_users():
     return users
 
+# Wait for the bot to start then start the check_jail task
 @interactions.listen()
 async def on_startup():
     cls_log.info("Bot is ready")
     check_jail.start()
 
+# Task to check the jail array every 5 seconds
 @interactions.Task.create(interactions.IntervalTrigger(seconds=5))
 async def check_jail():
     cls_log.info("Checking jail")
@@ -91,8 +102,11 @@ async def check_jail():
             release_user(u["user"])
         if u["annoy_user"] and (datetime.datetime.now() - u["annoyed_last"]) >= datetime.timedelta(seconds=60): # annoy the user every minute
             u["annoyed_last"] = datetime.datetime.now()
-            await annoy_user(u["user"], u["start_time"], u["duration"])
+            asyncio.create_task(annoy_user(u["user"], u["start_time"], u["duration"]))
 
+## Slash Commands
+
+# Slash command to jail a user
 @interactions.slash_command(name="jail", description="Jail a user")
 @interactions.slash_default_member_permission(Permissions.MANAGE_CHANNELS)
 @interactions.slash_option(name="user", description="The user to jail", opt_type=interactions.OptionType.USER, required=True)
@@ -106,6 +120,7 @@ async def jail(ctx: interactions.SlashContext, user: str, duration: str, annoy: 
     await interactions.Member.timeout(user, duration)
     await ctx.send(f'Jailing {user} for {duration} with annoy={annoy}')
 
+# Slash command to release a user
 @interactions.slash_command(name="release", description="Release a user from jail")
 @interactions.slash_default_member_permission(Permissions.MANAGE_CHANNELS)
 @interactions.slash_option(name="user", description="The user to jail", opt_type=interactions.OptionType.USER, required=True)
@@ -115,6 +130,7 @@ async def release(ctx: interactions.SlashContext, user: interactions.User):
     await interactions.Member.timeout(user, None)
     await ctx.send(f'Releasing {user}')
 
+# Slash command to list all users in jail
 @interactions.slash_command(name="list", description="List all users in jail")
 @interactions.slash_default_member_permission(Permissions.MANAGE_CHANNELS)
 async def list(ctx: interactions.SlashContext):
@@ -128,5 +144,5 @@ async def list(ctx: interactions.SlashContext):
             msg += f'{u["user"]} until {u["duration"]}\n'
         await ctx.send(msg)
 
-# start the bot
+# Start the bot
 bot.start()
